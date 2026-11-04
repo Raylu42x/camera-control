@@ -1,0 +1,3 @@
+// Copy to Config/Local.xcconfig (git-ignored) to sign with your own certificate.
+CODE_SIGN_IDENTITY = Apple Development
+DEVELOPMENT_TEAM = YOUR_TEAM_ID

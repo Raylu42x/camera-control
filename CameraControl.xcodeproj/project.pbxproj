@@ -17,6 +17,7 @@
 		995B7939E77AC46F9A7A08CF /* Overlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0860A0AFB29B9F370576A6 /* Overlays.swift */; };
 		9D0EB985993282115805D868 /* Studio.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECEBB07E1427504B3F91C7CD /* Studio.swift */; };
 		A3E68766E5FD904678FEFB51 /* Backgrounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF18D9C9D3A242AD22F403A0 /* Backgrounds.swift */; };
+		AAD7846E84B67A01B89682DA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 304FCDB3571D858405AF741E /* Assets.xcassets */; };
 		C1C02254C8C77182967DEE46 /* Tracking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7814C6B59EEF288E233066CD /* Tracking.swift */; };
 		C21A5FF06ED58EC1C44EF4EF /* ScreenSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24A715B6CA707DA842763891 /* ScreenSource.swift */; };
 		C6CB69F89F0EFD7E0B17DA52 /* Drawing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 344EB5176FD125D25497DFA7 /* Drawing.swift */; };
@@ -30,6 +31,7 @@
 		24A715B6CA707DA842763891 /* ScreenSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenSource.swift; sourceTree = "<group>"; };
 		2966FCB3294BB466E25BC253 /* CameraControl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CameraControl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2DEDC3481910798FDD680CB2 /* CameraControlApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraControlApp.swift; sourceTree = "<group>"; };
+		304FCDB3571D858405AF741E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		344EB5176FD125D25497DFA7 /* Drawing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Drawing.swift; sourceTree = "<group>"; };
 		5B55DE313DF9BE2B113F0F77 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		622C1FB18D7786219F512916 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -44,6 +46,7 @@
 		CA0860A0AFB29B9F370576A6 /* Overlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Overlays.swift; sourceTree = "<group>"; };
 		DCC96D9ECFE50281CF64A86F /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		ECEBB07E1427504B3F91C7CD /* Studio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Studio.swift; sourceTree = "<group>"; };
+		F6D279E8F8C064C05C5DD415 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -55,10 +58,19 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		53A1E4E1955927F20940AA41 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				F6D279E8F8C064C05C5DD415 /* Signing.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
 		6C76B39D684F6F8617BC896C = {
 			isa = PBXGroup;
 			children = (
 				C1558A576AB14E49A27859AE /* CameraControl */,
+				53A1E4E1955927F20940AA41 /* Config */,
 				3624846C3E2AE29553C44FFB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -67,6 +79,7 @@
 			isa = PBXGroup;
 			children = (
 				7A792D14B444C44ED4A93C90 /* AnimatedScenes.swift */,
+				304FCDB3571D858405AF741E /* Assets.xcassets */,
 				AF18D9C9D3A242AD22F403A0 /* Backgrounds.swift */,
 				11E0E8961BE3D737C548E780 /* Camera.swift */,
 				2DEDC3481910798FDD680CB2 /* CameraControlApp.swift */,
@@ -95,6 +108,7 @@
 			buildConfigurationList = 8BFA90F4B04B186600B8ACB7 /* Build configuration list for PBXNativeTarget "CameraControl" */;
 			buildPhases = (
 				0DBB51ED5F48B9483418EA9D /* Sources */,
+				76833974E6E664D5CFBEBCDA /* Resources */,
 			);
 			buildRules = (
 			);
@@ -117,7 +131,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					94F123CC39E4E49FBF21E024 = {
-						DevelopmentTeam = 435J4NHWXP;
+						DevelopmentTeam = "";
 						ProvisioningStyle = Manual;
 					};
 				};
@@ -140,6 +154,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		76833974E6E664D5CFBEBCDA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAD7846E84B67A01B89682DA /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		0DBB51ED5F48B9483418EA9D /* Sources */ = {
@@ -170,6 +195,7 @@
 /* Begin XCBuildConfiguration section */
 		28E4B7C563F6C7C89D67B79E /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F6D279E8F8C064C05C5DD415 /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -201,12 +227,9 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 435J4NHWXP;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -218,7 +241,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -265,6 +288,7 @@
 		};
 		AC8FB4BFDDC924426245DAF0 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = F6D279E8F8C064C05C5DD415 /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -296,12 +320,9 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 435J4NHWXP;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -319,7 +340,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

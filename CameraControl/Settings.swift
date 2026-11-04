@@ -213,7 +213,7 @@ struct EffectSettings: Codable, Equatable {
     // News anchor
     var newsEnabled = false
     var newsTag = "BREAKING NEWS"
-    var newsName = "Bennett Atwood"
+    var newsName = "Your Name"
     var newsTitle = "Live from the home office"
     var tickerEnabled = true
     var tickerText = "Local man turns webcam into a TV studio • Coffee levels reported at record highs • Meeting could have been an email, sources say"
