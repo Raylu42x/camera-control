@@ -22,6 +22,7 @@ final class Studio: ObservableObject {
     }
     @Published var cameraDenied = false
     @Published var fps = 0
+    @Published var latencyMs = 0
     @Published var customBackgroundName: String?
 
     let camera = CameraManager()
@@ -32,11 +33,14 @@ final class Studio: ObservableObject {
     init() {
         settings = pipeline.settings
         let pipeline = pipeline, frames = frames
-        camera.onFrame = { pb in
-            if let out = pipeline.process(pb) { frames.publish(out) }
+        camera.onFrame = { pb, captured in
+            if let out = pipeline.process(pb, captured: captured) { frames.publish(out) }
         }
-        pipeline.onFPS = { [weak self] fps in
-            DispatchQueue.main.async { self?.fps = fps }
+        pipeline.onStats = { [weak self] fps, latency in
+            DispatchQueue.main.async {
+                self?.fps = fps
+                self?.latencyMs = latency
+            }
         }
         for name in [AVCaptureDevice.wasConnectedNotification, AVCaptureDevice.wasDisconnectedNotification] {
             NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in

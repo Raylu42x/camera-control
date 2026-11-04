@@ -1,4 +1,5 @@
 import CoreImage
+import CoreMedia
 import CoreVideo
 import Metal
 import QuartzCore
@@ -8,8 +9,9 @@ import QuartzCore
 final class Pipeline {
     let ciContext = CIContext(mtlDevice: MTLCreateSystemDefaultDevice()!, options: [.cacheIntermediates: false])
     let particles = ParticleSystem()
-    /// Called about once a second with the output frame rate.
-    var onFPS: ((Int) -> Void)?
+    /// Called about once a second with the output frame rate and the average
+    /// camera-to-finished-frame latency in milliseconds.
+    var onStats: ((_ fps: Int, _ latencyMs: Int) -> Void)?
 
     private let lock = NSLock()
     private var _settings = EffectSettings.load()
@@ -25,6 +27,7 @@ final class Pipeline {
     private var heldBackdrop: CIImage?
     private var newsShownAt: Double = 0
     private var frameCount = 0
+    private var latencySum = 0.0
     private var fpsWindowStart = CACurrentMediaTime()
     private let clockFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -41,10 +44,13 @@ final class Pipeline {
         lock.withLock { _customBackground = img }
     }
 
-    func process(_ input: CVPixelBuffer) -> CVPixelBuffer? {
+    func process(_ input: CVPixelBuffer, captured: CMTime) -> CVPixelBuffer? {
         let s = settings
         let now = CACurrentMediaTime()
-        defer { previous = s; countFrame(now) }
+        defer {
+            previous = s
+            countFrame(now, latency: (CMClockGetTime(CMClockGetHostTimeClock()) - captured).seconds)
+        }
 
         // 1. Camera: fill the canvas, zoom, mirror, color adjust.
         var cam = CIImage(cvPixelBuffer: input).aspectFill(canvasRect, zoom: s.zoom)
@@ -260,18 +266,21 @@ final class Pipeline {
         var pb: CVPixelBuffer?
         CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pb)
         guard let pb else { return nil }
-        CVBufferSetAttachment(pb, kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2, .shouldPropagate)
-        CVBufferSetAttachment(pb, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
-        CVBufferSetAttachment(pb, kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_709_2, .shouldPropagate)
-        ciContext.render(img, to: pb, bounds: canvasRect, colorSpace: CGColorSpace(name: CGColorSpace.itur_709))
+        // Tag the surface as sRGB so Core Animation shows it with the right colors.
+        if let surface = CVPixelBufferGetIOSurface(pb)?.takeUnretainedValue() {
+            IOSurfaceSetValue(surface, kIOSurfaceColorSpace, CGColorSpace.sRGB)
+        }
+        ciContext.render(img, to: pb, bounds: canvasRect, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
         return pb
     }
 
-    private func countFrame(_ now: Double) {
+    private func countFrame(_ now: Double, latency: Double) {
         frameCount += 1
+        latencySum += latency
         if now - fpsWindowStart >= 1 {
-            onFPS?(Int(Double(frameCount) / (now - fpsWindowStart) + 0.5))
+            onStats?(Int(Double(frameCount) / (now - fpsWindowStart) + 0.5), Int(latencySum / Double(frameCount) * 1000))
             frameCount = 0
+            latencySum = 0
             fpsWindowStart = now
         }
     }

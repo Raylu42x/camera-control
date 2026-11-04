@@ -84,7 +84,8 @@ struct ContentView: View {
                 HStack(spacing: 6) {
                     if studio.settings.freeze { badge("FROZEN", .blue) }
                     if studio.settings.blank { badge("BE RIGHT BACK", .orange) }
-                    badge("\(studio.fps) fps", .black.opacity(0.5))
+                    badge("\(studio.fps) fps · \(studio.latencyMs) ms", .black.opacity(0.5))
+                        .help("Frame rate, and time from camera capture to finished frame")
                 }
                 .padding(10)
             }

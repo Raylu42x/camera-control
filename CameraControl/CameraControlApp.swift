@@ -32,28 +32,11 @@ struct VideoView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> VideoNSView {
         let view = VideoNSView()
-        frames.add(view.displayLayer)
+        frames.add(view)
         return view
     }
 
     func updateNSView(_ nsView: VideoNSView, context: Context) {}
-}
-
-final class VideoNSView: NSView {
-    let displayLayer = AVSampleBufferDisplayLayer()
-
-    init() {
-        super.init(frame: .zero)
-        displayLayer.videoGravity = .resizeAspect
-        displayLayer.backgroundColor = NSColor.black.cgColor
-        wantsLayer = true
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func makeBackingLayer() -> CALayer { displayLayer }
-
-    override var mouseDownCanMoveWindow: Bool { true }
 }
 
 /// Strips the traffic-light buttons so a window capture (OBS, screen share) shows only video,

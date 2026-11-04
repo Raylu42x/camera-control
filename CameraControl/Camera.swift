@@ -4,7 +4,8 @@ import AppKit
 /// Owns the physical camera and hands each frame to `onFrame` on a background queue.
 final class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let session = AVCaptureSession()
-    var onFrame: ((CVPixelBuffer) -> Void)?
+    /// Frame plus its capture time on the host clock (for latency measurement).
+    var onFrame: ((CVPixelBuffer, CMTime) -> Void)?
 
     private let output = AVCaptureVideoDataOutput()
     private let frameQueue = DispatchQueue(label: "camera.frames", qos: .userInteractive)
@@ -49,42 +50,63 @@ final class CameraManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pb = sampleBuffer.imageBuffer else { return }
-        onFrame?(pb)
+        var captured = sampleBuffer.presentationTimeStamp
+        if let clock = session.synchronizationClock {
+            captured = CMSyncConvertTime(captured, from: clock, to: CMClockGetHostTimeClock())
+        }
+        onFrame?(pb, captured)
     }
 }
 
 /// Fans finished frames out to every on-screen video view.
 final class FrameStore {
     private let lock = NSLock()
-    private let layers = NSHashTable<AVSampleBufferDisplayLayer>.weakObjects()
+    private let views = NSHashTable<VideoNSView>.weakObjects()
 
-    func add(_ layer: AVSampleBufferDisplayLayer) { lock.withLock { layers.add(layer) } }
+    func add(_ view: VideoNSView) { lock.withLock { views.add(view) } }
 
     func publish(_ pb: CVPixelBuffer) {
-        guard let sb = makeSampleBuffer(pb) else { return }
-        let targets = lock.withLock { layers.allObjects }
-        for layer in targets {
-            let renderer = layer.sampleBufferRenderer
-            if renderer.status == .failed { renderer.flush() }
-            renderer.enqueue(sb)
-        }
+        let targets = lock.withLock { views.allObjects }
+        for view in targets { view.show(pb) }
+    }
+}
+
+/// Shows frames by handing their IOSurface straight to the layer. Only the newest frame is
+/// ever pending, so the picture can't fall behind the camera (a sample-buffer queue can).
+final class VideoNSView: NSView {
+    private let lock = NSLock()
+    private var pending: CVPixelBuffer?
+    /// Held so the pool doesn't recycle the surface while it's on screen.
+    private var current: CVPixelBuffer?
+
+    init() {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+        layer?.contentsGravity = .resizeAspect
+        layer?.actions = ["contents": NSNull()]
     }
 
-    private func makeSampleBuffer(_ pb: CVPixelBuffer) -> CMSampleBuffer? {
-        var format: CMVideoFormatDescription?
-        CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: pb, formatDescriptionOut: &format)
-        guard let format else { return nil }
-        var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
-                                        decodeTimeStamp: .invalid)
-        var sb: CMSampleBuffer?
-        CMSampleBufferCreateReadyWithImageBuffer(allocator: nil, imageBuffer: pb, formatDescription: format,
-                                                 sampleTiming: &timing, sampleBufferOut: &sb)
-        guard let sb else { return nil }
-        if let attachments = CMSampleBufferGetSampleAttachmentsArray(sb, createIfNecessary: true), CFArrayGetCount(attachments) > 0 {
-            let dict = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
-            CFDictionarySetValue(dict, Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
-                                 Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    func show(_ pb: CVPixelBuffer) {
+        let needsSchedule = lock.withLock {
+            defer { pending = pb }
+            return pending == nil
         }
-        return sb
+        guard needsSchedule else { return }
+        DispatchQueue.main.async { [weak self] in self?.presentPending() }
+    }
+
+    private func presentPending() {
+        let pb = lock.withLock {
+            defer { pending = nil }
+            return pending
+        }
+        guard let pb, let surface = CVPixelBufferGetIOSurface(pb)?.takeUnretainedValue() else { return }
+        layer?.contents = surface
+        current = pb
     }
 }
