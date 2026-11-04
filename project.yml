@@ -1,0 +1,29 @@
+name: CameraControl
+options:
+  bundleIdPrefix: com.bennett
+  deploymentTarget:
+    macOS: "15.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: 435J4NHWXP
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Apple Development"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  CameraControl:
+    type: application
+    platform: macOS
+    sources: [CameraControl]
+    info:
+      path: CameraControl/Info.plist
+      properties:
+        CFBundleDisplayName: Camera Control
+        NSCameraUsageDescription: Camera Control uses your camera so it can add effects to your video.
+        LSApplicationCategoryType: public.app-category.video
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bennett.CameraControl
+        PRODUCT_NAME: Camera Control
+        ENABLE_HARDENED_RUNTIME: NO
