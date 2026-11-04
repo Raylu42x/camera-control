@@ -54,7 +54,7 @@ So v0.1 ships the full effects pipeline as a standalone app with an **Output win
 ### Using it in Zoom through OBS
 
 1. In Camera Control, click **Output Window** (top right of the toolbar). Leave the window open; it can sit behind other windows, but don't minimize it. Drag anywhere on it to move it, and close it with ⌘W.
-2. In OBS, under **Sources**, click **+** → **macOS Screen Capture**. Set *Method* to **Window Capture** and pick **Camera Control Output**. If macOS asks, allow OBS to record the screen. Don't use the legacy "Window Capture (Xcomposite)"-style source: it polls through an old API, keeps `tccd` busy, and added about a second of lag in testing. The Screen Capture source finds windows by ID, so **after relaunching Camera Control**, open the source's Properties and pick the window again.
+2. In OBS, under **Sources**, click **+** → **macOS Screen Capture**. Set *Method* to **Window Capture** and pick **Camera Control Output**. If macOS asks, allow OBS to record the screen. Don't use the older, deprecated "Window Capture" source: it polls through an old API, keeps `tccd` busy, and added about a second of lag in testing. The Screen Capture source finds windows by ID, so **after relaunching Camera Control**, open the source's Properties and pick the window again.
 3. Right-click the source → **Transform → Fit to Screen**. For a sharp image, set **Settings → Video** base and output resolution to 1280×720.
 4. Click **Start Virtual Camera**.
 5. In Zoom, go to **Settings → Video → Camera** and choose **OBS Virtual Camera**.
