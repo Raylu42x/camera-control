@@ -49,6 +49,14 @@ So v0.1 ships the full effects pipeline as a standalone app with an **Output win
 - share the Output window in a meeting, or
 - add the Output window to OBS as a *Window Capture* source and use **Start Virtual Camera**.
 
+### Using it in Zoom through OBS
+
+1. In Camera Control, click **Output Window** (top right of the toolbar). Leave the window open; it can sit behind other windows, but don't minimize it. Drag anywhere on it to move it, and close it with ⌘W.
+2. In OBS, under **Sources**, click **+** → **macOS Screen Capture**. Set *Method* to **Window Capture** and pick **Camera Control Output**. If macOS asks, allow OBS to record the screen.
+3. Right-click the source → **Transform → Fit to Screen**. For a sharp image, set **Settings → Video** base and output resolution to 1280×720.
+4. Click **Start Virtual Camera**.
+5. In Zoom, go to **Settings → Video → Camera** and choose **OBS Virtual Camera**.
+
 ### Adding the virtual camera (needs a paid developer account)
 
 The pipeline already produces finished `CVPixelBuffer`s (`Pipeline.process`), so here's the plan:

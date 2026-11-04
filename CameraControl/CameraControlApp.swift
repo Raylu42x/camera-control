@@ -17,6 +17,7 @@ struct CameraControlApp: App {
         Window("Camera Control Output", id: "output") {
             VideoView(frames: studio.frames)
                 .background(.black)
+                .background(CleanOutputWindow())
                 .ignoresSafeArea()
                 .frame(minWidth: 480, minHeight: 270)
         }
@@ -51,4 +52,25 @@ final class VideoNSView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func makeBackingLayer() -> CALayer { displayLayer }
+
+    override var mouseDownCanMoveWindow: Bool { true }
+}
+
+/// Strips the traffic-light buttons so a window capture (OBS, screen share) shows only video,
+/// keeps the window 16:9, and lets you drag it anywhere. Close it with ⌘W.
+private struct CleanOutputWindow: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                window.standardWindowButton(kind)?.isHidden = true
+            }
+            window.isMovableByWindowBackground = true
+            window.contentAspectRatio = canvasSize
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
