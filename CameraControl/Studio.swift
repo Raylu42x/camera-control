@@ -11,6 +11,7 @@ final class Studio: ObservableObject {
             guard settings != oldValue else { return }
             pipeline.update(settings)
             settings.save()
+            if settings.backgroundMode != oldValue.backgroundMode { updateScreenCapture() }
         }
     }
     @Published var devices: [AVCaptureDevice] = []
@@ -60,10 +61,62 @@ final class Studio: ObservableObject {
         } else {
             camera.select(deviceID: selectedDeviceID)
         }
+        updateScreenCapture()
+        runLaunchSnapshotIfRequested()
     }
 
     func refreshDevices() {
         devices = CameraManager.availableDevices()
+    }
+
+    /// Screen capture runs only while presenter mode is the background.
+    private func updateScreenCapture() {
+        if settings.backgroundMode == .screen { pipeline.screen.start() } else { pipeline.screen.stop() }
+    }
+
+    /// Saves the current output to ~/Pictures/Camera Control and reveals it in Finder.
+    func takeSnapshot() {
+        let dir = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Camera Control", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        let url = dir.appendingPathComponent("Snapshot \(f.string(from: Date())).png")
+        pipeline.snapshot(to: url)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
+
+    /// Test hook: `--args -snapshotPath <file> [-snapshotDelay <s>] [-turnOn cameraOff|blank|startingSoon]
+    /// [-turnOnLead <s>]` launches, optionally switches a card on `turnOnLead` seconds before the
+    /// snapshot (default 1.5, i.e. after the transition), saves one frame, and quits.
+    private func runLaunchSnapshotIfRequested() {
+        let args = UserDefaults.standard
+        guard let path = args.string(forKey: "snapshotPath") else { return }
+        let delay = args.double(forKey: "snapshotDelay") > 0 ? args.double(forKey: "snapshotDelay") : 5
+        let lead = args.double(forKey: "turnOnLead") > 0 ? args.double(forKey: "turnOnLead") : 1.5
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay - lead) { [self] in
+            switch args.string(forKey: "turnOn") {
+            case "cameraOff": settings.cameraOff = true
+            case "blank": settings.blank = true
+            case "startingSoon": settings.startingSoon = true
+            default: break
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [self] in
+            pipeline.snapshot(to: URL(fileURLWithPath: path))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSApp.terminate(nil) }
+        }
+    }
+
+    /// One-click weather report: map scene, weather tag, news graphics on.
+    func weatherMode() {
+        settings.backgroundMode = .preset
+        settings.backgroundPreset = .weather
+        settings.newsTag = "WEATHER"
+        settings.newsTitle = "Your local forecast"
+        settings.newsEnabled = true
     }
 
     func react(_ reaction: Reaction) {
@@ -84,7 +137,9 @@ final class Studio: ObservableObject {
 
     func thumbnail(_ preset: BackgroundPreset) -> NSImage {
         if let img = thumbnailCache[preset] { return img }
-        let small = Backgrounds.image(preset).transformed(by: CGAffineTransform(scaleX: 0.2, y: 0.2))
+        // A private AnimatedScenes so this doesn't share drawing state with the camera queue.
+        let full = preset.isAnimated ? AnimatedScenes().image(preset, time: 3) : Backgrounds.image(preset)
+        let small = full.transformed(by: CGAffineTransform(scaleX: 0.2, y: 0.2))
         let cg = pipeline.ciContext.createCGImage(small, from: small.extent)!
         let img = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         thumbnailCache[preset] = img

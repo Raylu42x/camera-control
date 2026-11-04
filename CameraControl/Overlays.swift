@@ -130,6 +130,43 @@ final class OverlayRenderer {
         }
     }
 
+    /// What viewers see while the camera is switched off.
+    func offCard() -> CIImage {
+        cached("off") {
+            makeImage(width: Int(canvasSize.width), height: Int(canvasSize.height)) { ctx in
+                fill(ctx, canvasRect, rgb(0.06, 0.06, 0.08))
+                drawText("Camera off", in: CGRect(x: 0, y: canvasSize.height / 2 - 30, width: canvasSize.width, height: 60),
+                         font: font(30, weight: .semibold), color: rgb(1, 1, 1, 0.45), center: true)
+            }
+        }
+    }
+
+    /// Title, big countdown and subtitle for the "starting soon" card (transparent).
+    func startingSoon(title: String, clock: String, subtitle: String) -> CIImage {
+        cached("soon|\(title)|\(clock)|\(subtitle)") {
+            makeImage(width: Int(canvasSize.width), height: Int(canvasSize.height)) { _ in
+                let mid = canvasSize.height / 2
+                drawText(title, in: CGRect(x: 0, y: mid + 90, width: canvasSize.width, height: 100),
+                         font: font(76, weight: .heavy), color: .white, center: true)
+                drawText(clock, in: CGRect(x: 0, y: mid - 70, width: canvasSize.width, height: 160),
+                         font: NSFont.monospacedDigitSystemFont(ofSize: 140, weight: .black), color: .white, center: true)
+                drawText(subtitle, in: CGRect(x: 0, y: mid - 150, width: canvasSize.width, height: 60),
+                         font: font(32, weight: .medium), color: rgb(1, 1, 1, 0.85), center: true)
+            }
+        }
+    }
+
+    /// A full-frame message on a dark background (e.g. waiting for screen permission).
+    func message(_ text: String) -> CIImage {
+        cached("msg|\(text)") {
+            makeImage(width: Int(canvasSize.width), height: Int(canvasSize.height)) { ctx in
+                fill(ctx, canvasRect, rgb(0.1, 0.1, 0.14))
+                drawText(text, in: CGRect(x: 0, y: canvasSize.height / 2 - 30, width: canvasSize.width, height: 60),
+                         font: font(26, weight: .medium), color: rgb(1, 1, 1, 0.7), center: true)
+            }
+        }
+    }
+
     func holdBackdrop() -> CIImage {
         cached("holdbg") {
             makeImage(width: Int(canvasSize.width), height: Int(canvasSize.height)) { ctx in

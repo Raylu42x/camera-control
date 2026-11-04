@@ -11,7 +11,7 @@ enum Backgrounds {
         if let img = cache[preset] { return img }
         var img = CIImage(cgImage: draw(preset))
         // Soften the scene a little so it reads as "behind" you.
-        if preset != .greenScreen {
+        if ![.greenScreen, .matrix, .weather].contains(preset) {
             img = img.clampedToExtent().applyingGaussianBlur(sigma: 2.5).cropped(to: canvasRect)
         }
         cache[preset] = img
@@ -135,9 +135,109 @@ enum Backgrounds {
 
             case .greenScreen:
                 fill(ctx, CGRect(x: 0, y: 0, width: W, height: H), rgb(0, 0.85, 0.25))
+
+            case .weather:
+                drawWeatherMap(ctx, W: W, H: H, rng: &rng)
+
+            case .snow:
+                linearGradient(ctx, [rgb(0.05, 0.08, 0.2), rgb(0.25, 0.35, 0.55)],
+                               from: CGPoint(x: 0, y: H), to: CGPoint(x: 0, y: 0))
+                radialGradient(ctx, [rgb(0.95, 0.95, 1, 0.9), rgb(0.95, 0.95, 1, 0)], center: CGPoint(x: W * 0.15, y: H * 0.85), radius: 70)
+                // Rolling snowy hills with pine trees.
+                for (i, hill) in [(0.0, 0.32, rgb(0.82, 0.86, 0.95)), (0.45, 0.24, rgb(0.92, 0.94, 1)), (-0.2, 0.16, rgb(1, 1, 1))].enumerated() {
+                    ctx.setFillColor(hill.2.cgColor)
+                    ctx.move(to: CGPoint(x: 0, y: 0))
+                    var x: CGFloat = 0
+                    while x <= W {
+                        ctx.addLine(to: CGPoint(x: x, y: H * hill.1 + sin(x / 180 + hill.0 * 6) * 30))
+                        x += 20
+                    }
+                    ctx.addLine(to: CGPoint(x: W, y: 0))
+                    ctx.fillPath()
+                    for _ in 0..<(6 - i * 2) {
+                        let tx = rng.next() * W, ty = H * hill.1 - 20, th = 70 + rng.next() * 60
+                        ctx.setFillColor(rgb(0.1, 0.25 + CGFloat(i) * 0.05, 0.2).cgColor)
+                        ctx.move(to: CGPoint(x: tx - th * 0.3, y: ty)); ctx.addLine(to: CGPoint(x: tx, y: ty + th))
+                        ctx.addLine(to: CGPoint(x: tx + th * 0.3, y: ty)); ctx.fillPath()
+                    }
+                }
+
+            case .matrix:
+                fill(ctx, CGRect(x: 0, y: 0, width: W, height: H), .black)
+
+            case .clouds:
+                linearGradient(ctx, [rgb(0.25, 0.55, 0.95), rgb(0.7, 0.85, 1)],
+                               from: CGPoint(x: 0, y: H), to: CGPoint(x: 0, y: 0))
+                radialGradient(ctx, [rgb(1, 1, 0.9, 0.9), rgb(1, 1, 0.9, 0)], center: CGPoint(x: W * 0.85, y: H * 0.85), radius: 160)
+
+            case .aquarium:
+                linearGradient(ctx, [rgb(0.1, 0.55, 0.75), rgb(0.02, 0.15, 0.35)],
+                               from: CGPoint(x: 0, y: H), to: CGPoint(x: 0, y: 0))
+                // Light rays from the surface.
+                for i in 0..<6 {
+                    let x = CGFloat(i) * 240 + rng.next() * 80
+                    ctx.setFillColor(rgb(0.8, 1, 1, 0.07).cgColor)
+                    ctx.move(to: CGPoint(x: x, y: H)); ctx.addLine(to: CGPoint(x: x + 90, y: H))
+                    ctx.addLine(to: CGPoint(x: x + 260, y: 0)); ctx.addLine(to: CGPoint(x: x + 120, y: 0)); ctx.fillPath()
+                }
+                fill(ctx, CGRect(x: 0, y: 0, width: W, height: 70), rgb(0.85, 0.75, 0.5))
+                // Seaweed.
+                ctx.setLineWidth(9); ctx.setLineCap(.round)
+                for i in 0..<14 {
+                    let x = CGFloat(i) * 95 + rng.next() * 40, h = 120 + rng.next() * 200
+                    ctx.setStrokeColor(rgb(0.1, 0.5 + rng.next() * 0.2, 0.25).cgColor)
+                    ctx.move(to: CGPoint(x: x, y: 50))
+                    ctx.addCurve(to: CGPoint(x: x + 10, y: 50 + h), control1: CGPoint(x: x + 40, y: 50 + h * 0.3),
+                                 control2: CGPoint(x: x - 40, y: 50 + h * 0.7))
+                    ctx.strokePath()
+                }
             }
         }
     }
+}
+
+/// Fictional cities on the weather map: name, position, temperature and forecast emoji.
+let weatherCities: [(name: String, x: CGFloat, y: CGFloat, temp: Int, icon: String)] = [
+    ("Pixelburg", 170, 530, 72, "☀️"), ("Zoomsville", 300, 330, 64, "🌧️"), ("Webcam City", 190, 150, 41, "🌨️"),
+    ("Bufferton", 1060, 560, 58, "⛅"), ("Mute Harbor", 1110, 340, 61, "⛈️"), ("Port Latency", 990, 160, 77, "☀️"),
+]
+
+private func drawWeatherMap(_ ctx: CGContext, W: CGFloat, H: CGFloat, rng: inout SeededRandom) {
+    linearGradient(ctx, [rgb(0.12, 0.35, 0.65), rgb(0.05, 0.2, 0.45)], from: CGPoint(x: 0, y: H), to: .zero)
+    // Two blobby continents.
+    for (cx, cy, r) in [(W * 0.22, H * 0.5, 330.0), (W * 0.8, H * 0.48, 320.0)] as [(CGFloat, CGFloat, CGFloat)] {
+        ctx.setFillColor(rgb(0.35, 0.62, 0.3).cgColor)
+        let steps = 18
+        for s in 0...steps {
+            let a = CGFloat(s) / CGFloat(steps) * .pi * 2
+            let rr = r * (0.75 + rng.next() * 0.35)
+            let p = CGPoint(x: cx + cos(a) * rr * 0.75, y: cy + sin(a) * rr)
+            s == 0 ? ctx.move(to: p) : ctx.addLine(to: p)
+        }
+        ctx.closePath(); ctx.fillPath()
+    }
+    // Dashed borders.
+    ctx.setStrokeColor(rgb(1, 1, 1, 0.35).cgColor); ctx.setLineWidth(2); ctx.setLineDash(phase: 0, lengths: [8, 6])
+    for x in [W * 0.18, W * 0.27, W * 0.78, W * 0.86] {
+        ctx.move(to: CGPoint(x: x, y: H * 0.15)); ctx.addLine(to: CGPoint(x: x + 30, y: H * 0.85))
+    }
+    ctx.strokePath(); ctx.setLineDash(phase: 0, lengths: [])
+    // A cold front.
+    ctx.setStrokeColor(rgb(0.3, 0.6, 1).cgColor); ctx.setLineWidth(5)
+    ctx.move(to: CGPoint(x: 60, y: 260)); ctx.addCurve(to: CGPoint(x: 420, y: 420), control1: CGPoint(x: 200, y: 200), control2: CGPoint(x: 300, y: 480))
+    ctx.strokePath()
+    // City dots, names and temperatures.
+    for c in weatherCities {
+        fill(ctx, CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10), .white, radius: 5)
+        drawText(c.name, in: CGRect(x: c.x - 80, y: c.y - 44, width: 160, height: 28), font: font(20, weight: .bold), color: .white, center: true)
+        let box = CGRect(x: c.x + 40, y: c.y - 2, width: 74, height: 40)
+        fill(ctx, box, rgb(0, 0, 0, 0.45), radius: 8)
+        drawText("\(c.temp)°", in: box, font: font(28, weight: .heavy), color: rgb(1, 0.85, 0.3), center: true)
+    }
+    // Banner.
+    let banner = CGRect(x: W - 330, y: H - 70, width: 300, height: 46)
+    fill(ctx, banner, rgb(0.85, 0.05, 0.1), radius: 6)
+    drawText("LOCAL FORECAST", in: banner, font: font(26, condensed: true), color: .white, center: true)
 }
 
 /// Tiny deterministic RNG so the procedural scenes look the same every launch.

@@ -6,7 +6,7 @@ struct ContentView: View {
     @State private var tab = SidebarTab.look
 
     enum SidebarTab: String, CaseIterable, Identifiable {
-        case look = "Look", background = "Scene", fun = "Fun", news = "News", text = "Text"
+        case look = "Look", background = "Scene", you = "You", fun = "Fun", news = "News", cards = "Cards"
         var id: String { rawValue }
     }
 
@@ -35,9 +35,10 @@ struct ContentView: View {
                         switch tab {
                         case .look: LookPanel()
                         case .background: BackgroundPanel()
+                        case .you: YouPanel()
                         case .fun: FunPanel()
                         case .news: NewsPanel()
-                        case .text: TextPanel()
+                        case .cards: CardsPanel()
                         }
                     }
                     .padding(.horizontal, 16)
@@ -61,6 +62,13 @@ struct ContentView: View {
                 }
                 .help("Open a clean output window to share or capture")
             }
+            ToolbarItem {
+                Button { studio.takeSnapshot() } label: {
+                    Label("Snapshot", systemImage: "camera")
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .help("Save the current output to Pictures › Camera Control (⇧⌘S)")
+            }
         }
         .task { await studio.start() }
     }
@@ -83,7 +91,9 @@ struct ContentView: View {
             .overlay(alignment: .topTrailing) {
                 HStack(spacing: 6) {
                     if studio.settings.freeze { badge("FROZEN", .blue) }
+                    if studio.settings.cameraOff { badge("CAMERA OFF", .gray) }
                     if studio.settings.blank { badge("BE RIGHT BACK", .orange) }
+                    if studio.settings.startingSoon { badge("STARTING SOON", .pink) }
                     badge("\(studio.fps) fps · \(studio.latencyMs) ms", .black.opacity(0.5))
                         .help("Frame rate, and time from camera capture to finished frame")
                 }
@@ -104,6 +114,9 @@ struct ContentView: View {
             BigToggle(title: "Freeze", icon: "snowflake", isOn: $studio.settings.freeze, tint: .blue)
                 .keyboardShortcut("f", modifiers: .command)
                 .help("Hold the current frame (⌘F)")
+            BigToggle(title: "Camera Off", icon: "video.slash.fill", isOn: $studio.settings.cameraOff, tint: .gray)
+                .keyboardShortcut("k", modifiers: .command)
+                .help("Turn your video off and on with an animated transition (⌘K)")
             BigToggle(title: "Be Right Back", icon: "pause.circle.fill", isOn: $studio.settings.blank, tint: .orange)
                 .keyboardShortcut("b", modifiers: .command)
                 .help("Swap your video for a 'be right back' card (⌘B)")
@@ -215,7 +228,9 @@ private struct LookPanel: View {
         }
 
         SectionTitle("Camera")
-        Toggle("Mirror", isOn: $studio.settings.mirror)
+        Toggle("Mirror video", isOn: $studio.settings.mirror)
+        Text("Flips the camera in the output window (what OBS and Zoom get). Text and graphics stay readable. Keep Zoom's \"Mirror my video\" off.")
+            .font(.caption).foregroundStyle(.secondary)
         LabeledSlider(label: "Zoom", value: $studio.settings.zoom, range: 1...3)
         LabeledSlider(label: "Brightness", value: $studio.settings.brightness, range: -0.4...0.4)
         LabeledSlider(label: "Contrast", value: $studio.settings.contrast, range: 0.5...1.8)
@@ -254,12 +269,16 @@ private struct BackgroundPanel: View {
                     Image(nsImage: studio.thumbnail(p))
                         .resizable().aspectRatio(16 / 9, contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 5))
-                    Text(p.label).font(.caption.weight(.medium))
+                    Text(p.isAnimated ? "\(p.label) ▶︎" : p.label).font(.caption.weight(.medium))
                 }
                 .padding(6)
             }
         case .color:
             ColorPicker("Color", selection: studio.backgroundColor, supportsOpacity: false)
+        case .screen:
+            Text("Presenter mode: your screen goes behind you. The first time, macOS asks to allow Screen Recording for Camera Control (you may need to reopen the app).")
+                .font(.callout).foregroundStyle(.secondary)
+            Toggle("Put me in the corner", isOn: $studio.settings.presenterSmall)
         case .custom:
             Button("Choose Image…") { studio.chooseBackgroundImage() }
             Text(studio.customBackgroundName ?? "No image picked yet.")
@@ -324,15 +343,73 @@ private struct NewsPanel: View {
         Toggle("LIVE bug with clock", isOn: $studio.settings.showLiveBug)
         TextField("Channel name", text: $studio.settings.channelName)
 
+        Button("☀️ Weather report mode") { studio.weatherMode() }
+            .help("Weather Map scene + WEATHER lower third")
         Text("Tip: pair with the News Studio scene in the Scene tab.")
             .font(.caption).foregroundStyle(.secondary)
     }
 }
 
-private struct TextPanel: View {
+private struct YouPanel: View {
     @EnvironmentObject var studio: Studio
 
     var body: some View {
+        SectionTitle("You vs. background")
+        TileGrid(items: PersonEffect.allCases, selection: $studio.settings.personEffect, columns: 2) { e in
+            Text(e.label).font(.callout.weight(.medium))
+        }
+        Text(personHint).font(.caption).foregroundStyle(.secondary)
+
+        SectionTitle("Face")
+        Toggle("Laser eyes 👀", isOn: $studio.settings.laserEyes)
+        Text("Witness protection").font(.callout).foregroundStyle(.secondary)
+        Picker("", selection: $studio.settings.witness) {
+            ForEach(WitnessMode.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+
+        SectionTitle("Framing")
+        Toggle("Auto-framing (follow my face)", isOn: $studio.settings.autoFrame)
+        Text("Zooms in and glides to keep you centered. Use Zoom in the Look tab to set how close.")
+            .font(.caption).foregroundStyle(.secondary)
+    }
+
+    private var personHint: String {
+        switch studio.settings.personEffect {
+        case .none: "Effects that treat you and the room differently."
+        case .colorPop: "You stay in color; everything behind you goes black and white."
+        case .neonOutline: "A glowing outline that cycles through colors."
+        case .clones: "Two delayed copies of you, one on each side. Wave!"
+        case .ghostTrail: "Move around to leave fading echoes."
+        }
+    }
+}
+
+private struct CardsPanel: View {
+    @EnvironmentObject var studio: Studio
+
+    var body: some View {
+        SectionTitle("Camera off")
+        Toggle("Camera off", isOn: $studio.settings.cameraOff).toggleStyle(.switch)
+        Text("Transition (also used for Be Right Back and Starting Soon)").font(.caption).foregroundStyle(.secondary)
+        TileGrid(items: OffStyle.allCases, selection: $studio.settings.offStyle) { o in
+            Text(o.label).font(.callout.weight(.medium))
+        }
+
+        SectionTitle("Starting soon")
+        TextField("Title", text: $studio.settings.startingSoonTitle)
+        TextField("Subtitle", text: $studio.settings.startingSoonSubtitle)
+        Stepper("Countdown: \(studio.settings.countdownMinutes) min", value: $studio.settings.countdownMinutes, in: 1...60)
+        Button(studio.settings.startingSoon ? "Stop countdown" : "Start countdown") {
+            studio.settings.startingSoon.toggle()
+        }
+
+        SectionTitle("Be right back")
+        TextField("Title", text: $studio.settings.blankTitle)
+        TextField("Subtitle", text: $studio.settings.blankSubtitle)
+        Toggle("Show it now", isOn: $studio.settings.blank)
+
         SectionTitle("Caption")
         Toggle("Show caption", isOn: $studio.settings.captionEnabled).toggleStyle(.switch)
         TextField("Caption", text: $studio.settings.captionText)
@@ -341,10 +418,5 @@ private struct TextPanel: View {
             Text("Bottom").tag(CaptionPosition.bottom)
         }
         .pickerStyle(.segmented)
-
-        SectionTitle("Be right back card")
-        TextField("Title", text: $studio.settings.blankTitle)
-        TextField("Subtitle", text: $studio.settings.blankSubtitle)
-        Toggle("Show it now", isOn: $studio.settings.blank)
     }
 }

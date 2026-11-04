@@ -9,6 +9,7 @@ import QuartzCore
 final class Pipeline {
     let ciContext = CIContext(mtlDevice: MTLCreateSystemDefaultDevice()!, options: [.cacheIntermediates: false])
     let particles = ParticleSystem()
+    let screen = ScreenSource()
     /// Called about once a second with the output frame rate and the average
     /// camera-to-finished-frame latency in milliseconds.
     var onStats: ((_ fps: Int, _ latencyMs: Int) -> Void)?
@@ -20,7 +21,17 @@ final class Pipeline {
     private let segmenter = Segmenter()
     private let faces = FaceTracker()
     private let overlays = OverlayRenderer()
+    private let looks = Looks()
+    private let scenes = AnimatedScenes()
+    private let history = FrameHistory()
     private var pool: CVPixelBufferPool?
+    private var lastFrameTime: Double?
+    /// Smoothed point the zoom is centered on (auto-framing).
+    private var frameCenter: CGPoint?
+    /// 0 = showing video, 1 = showing the card; animated by the transition style.
+    private var cardProgress = 0.0
+    private var cardKind = CardKind.off
+    private var countdownStart = 0.0
     private var previous = EffectSettings()
     /// Frame captured when freeze or "be right back" is switched on.
     private var held: CIImage?
@@ -35,7 +46,12 @@ final class Pipeline {
         return f
     }()
 
+    private var _snapshotURL: URL?
+
     var settings: EffectSettings { lock.withLock { _settings } }
+
+    /// Saves the next finished frame as a PNG at `url`.
+    func snapshot(to url: URL) { lock.withLock { _snapshotURL = url } }
 
     func update(_ s: EffectSettings) { lock.withLock { _settings = s } }
 
@@ -47,43 +63,77 @@ final class Pipeline {
     func process(_ input: CVPixelBuffer, captured: CMTime) -> CVPixelBuffer? {
         let s = settings
         let now = CACurrentMediaTime()
+        let dt = min(now - (lastFrameTime ?? now), 0.1)
+        lastFrameTime = now
         defer {
             previous = s
             countFrame(now, latency: (CMClockGetTime(CMClockGetHostTimeClock()) - captured).seconds)
         }
 
-        // 1. Camera: fill the canvas, zoom, mirror, color adjust.
-        var cam = CIImage(cvPixelBuffer: input).aspectFill(canvasRect, zoom: s.zoom)
+        // 1. Camera: fill the canvas, mirror, color adjust, then zoom / auto-frame. Mirroring
+        // flips only the camera image, so the output (and OBS/Zoom) is mirrored while text
+        // and graphics drawn later stay readable.
+        var full = CIImage(cvPixelBuffer: input).aspectFill(canvasRect)
         if s.mirror {
-            cam = cam.transformed(by: CGAffineTransform(scaleX: -1, y: 1).translatedBy(x: -canvasSize.width, y: 0))
+            full = full.transformed(by: CGAffineTransform(scaleX: -1, y: 1).translatedBy(x: -canvasSize.width, y: 0))
         }
         if s.brightness != 0 || s.contrast != 1 || s.saturation != 1 {
-            cam = cam.applyingFilter("CIColorControls", parameters: [
+            full = full.applyingFilter("CIColorControls", parameters: [
                 kCIInputBrightnessKey: s.brightness, kCIInputContrastKey: s.contrast, kCIInputSaturationKey: s.saturation])
         }
-
-        if s.sticker != .none || s.filter.isDistortion {
+        let needFaces = s.sticker != .none || s.filter.isDistortion || s.laserEyes || s.witness != .off || s.autoFrame
+        // Auto-framing needs faces from the whole frame before deciding where to zoom.
+        if s.autoFrame { faces.update(with: full) }
+        let frame = framing(s, face: s.autoFrame ? faces.raw.first : nil)
+        let cam = frame.isIdentity ? full : full.transformed(by: frame).cropped(to: canvasRect)
+        if s.autoFrame {
+            faces.apply(frame)
+        } else if needFaces {
             faces.update(with: cam)
         } else {
             faces.clear()
         }
 
-        // 2. Background replacement behind the person.
+        // 2. You vs. background: replacement scenes and person effects.
         var base = cam
-        if s.backgroundMode != .none, let mask = segmenter.mask(for: cam) {
-            let soft = mask.clampedToExtent().applyingGaussianBlur(sigma: 1.5).cropped(to: canvasRect)
-            base = cam.applyingFilter("CIBlendWithMask", parameters: [
-                kCIInputBackgroundImageKey: background(for: s, camera: cam), kCIInputMaskImageKey: soft])
+        let fx = s.personEffect
+        if s.backgroundMode != .none || fx != .none, let mask = segmenter.mask(for: cam) {
+            var soft = mask.clampedToExtent().applyingGaussianBlur(sigma: 1.5).cropped(to: canvasRect)
+            var person = cam.applyingFilter("CIBlendWithMask", parameters: [
+                kCIInputBackgroundImageKey: CIImage.empty(), kCIInputMaskImageKey: soft])
+            var backdrop = s.backgroundMode == .none ? cam : background(for: s, camera: cam, time: now)
+            if fx == .colorPop { backdrop = backdrop.applyingFilter("CIPhotoEffectNoir") }
+            if fx == .clones || fx == .ghostTrail {
+                history.push(person, context: ciContext)
+                backdrop = (fx == .clones ? history.clones() : history.trail()).composited(over: backdrop)
+            } else {
+                history.clear()
+            }
+            if s.backgroundMode == .screen && s.presenterSmall {
+                // Presenter mode: you shrink into the bottom-right corner over the screen.
+                let k: CGFloat = 0.42
+                let corner = CGAffineTransform(scaleX: k, y: k)
+                    .concatenating(CGAffineTransform(translationX: canvasSize.width * (1 - k) - 24, y: 24))
+                person = person.transformed(by: corner)
+                soft = soft.transformed(by: corner)
+                faces.apply(s.autoFrame ? frame.concatenating(corner) : corner)
+            }
+            base = person.composited(over: backdrop)
+            if fx == .neonOutline { base = neonOutline(mask: soft, time: now).composited(over: base) }
+            base = base.cropped(to: canvasRect)
+        } else {
+            history.clear()
         }
 
-        // 3. Look filter and face stickers.
+        // 3. Look filter, then face effects on top.
         base = applyFilter(base, s, time: now)
-        if s.sticker != .none {
-            base = stickers(s.sticker, over: base)
-        }
+        if s.witness != .off { base = witnessProtection(base, faces: faces.faces, mode: s.witness) }
+        if s.sticker != .none { base = stickers(s.sticker, over: base) }
+        if s.laserEyes { base = laserEyes(base, faces: faces.faces, time: now) }
 
-        // 4. Freeze / be right back.
-        if (s.freeze && !previous.freeze) || (s.blank && !previous.blank) {
+        // 4. Freeze, and cards (camera off / be right back / starting soon) with transitions.
+        let cardTurnedOn = s.showsCard && !previous.showsCard
+        if (s.freeze && !previous.freeze) || cardTurnedOn {
             held = snapshot(base)
             heldBackdrop = held.flatMap {
                 snapshot($0.clampedToExtent().applyingGaussianBlur(sigma: 28).cropped(to: canvasRect)
@@ -91,9 +141,13 @@ final class Pipeline {
             }
         }
         if s.freeze, let held { base = held }
-        if s.blank {
-            base = overlays.holdCard(title: s.blankTitle, subtitle: s.blankSubtitle)
-                .composited(over: heldBackdrop ?? overlays.holdBackdrop())
+        if s.startingSoon && !previous.startingSoon { countdownStart = now }
+        if s.showsCard { cardKind = s.startingSoon ? .startingSoon : s.blank ? .beRightBack : .off }
+        let step = dt / 0.8
+        cardProgress = s.showsCard ? min(1, cardProgress + step) : max(0, cardProgress - step)
+        if cardProgress > 0 {
+            base = transition(s.offStyle, progress: cardProgress, video: base, card: card(cardKind, s, time: now),
+                              time: now, looks: looks)
         }
 
         // 5. Broadcast graphics, captions, reactions.
@@ -126,18 +180,62 @@ final class Pipeline {
                 .composited(over: out)
         }
         out = particles.render(over: out)
+        let final = out.cropped(to: canvasRect).composited(over: CIImage.black.cropped(to: canvasRect))
 
-        return render(out.cropped(to: canvasRect).composited(over: CIImage.black.cropped(to: canvasRect)))
+        if let url = lock.withLock({ defer { _snapshotURL = nil }; return _snapshotURL }) {
+            try? ciContext.writePNGRepresentation(of: final, to: url, format: .RGBA8,
+                                                  colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+        }
+        return render(final)
     }
 
     // MARK: - Pieces
 
-    private func background(for s: EffectSettings, camera: CIImage) -> CIImage {
+    private enum CardKind { case off, beRightBack, startingSoon }
+
+    private func card(_ kind: CardKind, _ s: EffectSettings, time: Double) -> CIImage {
+        switch kind {
+        case .off:
+            return overlays.offCard()
+        case .beRightBack:
+            return overlays.holdCard(title: s.blankTitle, subtitle: s.blankSubtitle)
+                .composited(over: heldBackdrop ?? overlays.holdBackdrop())
+        case .startingSoon:
+            let left = max(0, Double(s.countdownMinutes * 60) - (time - countdownStart))
+            let clock = left > 0 ? String(format: "%d:%02d", Int(left) / 60, Int(left) % 60) : "Now!"
+            return overlays.startingSoon(title: s.startingSoonTitle, clock: clock, subtitle: s.startingSoonSubtitle)
+                .composited(over: startingSoonBackdrop(time: time))
+        }
+    }
+
+    /// Zoom transform; with auto-framing it glides to keep your face in frame.
+    private func framing(_ s: EffectSettings, face: TrackedFace?) -> CGAffineTransform {
+        let W = canvasSize.width, H = canvasSize.height
+        let z = s.autoFrame ? max(s.zoom, 1.6) : s.zoom
+        var target = CGPoint(x: W / 2, y: H / 2)
+        if s.autoFrame, let f = face {
+            // Aim a little below the face so it sits in the upper part of the frame.
+            target = CGPoint(x: f.rect.midX, y: f.rect.midY - f.rect.height * 0.2)
+        }
+        let c = frameCenter.map { CGPoint(x: $0.x + (target.x - $0.x) * 0.08, y: $0.y + (target.y - $0.y) * 0.08) } ?? target
+        frameCenter = c
+        guard z > 1.001 else { return .identity }
+        let tx = min(0, max(W - W * z, W / 2 - c.x * z))
+        let ty = min(0, max(H - H * z, H / 2 - c.y * z))
+        return CGAffineTransform(a: z, b: 0, c: 0, d: z, tx: tx, ty: ty)
+    }
+
+    private func background(for s: EffectSettings, camera: CIImage, time: Double) -> CIImage {
         switch s.backgroundMode {
         case .none, .blur:
             return camera.clampedToExtent().applyingGaussianBlur(sigma: s.blurRadius).cropped(to: canvasRect)
         case .preset:
-            return Backgrounds.image(s.backgroundPreset)
+            return s.backgroundPreset.isAnimated ? scenes.image(s.backgroundPreset, time: time) : Backgrounds.image(s.backgroundPreset)
+        case .screen:
+            if let screen = screen.image { return screen.aspectFill(canvasRect) }
+            return overlays.message(screen.failed
+                ? "Allow Screen Recording for Camera Control in System Settings → Privacy & Security"
+                : "Starting screen capture…")
         case .color:
             let c = s.backgroundColor
             return CIImage(color: CIColor(red: c.r, green: c.g, blue: c.b)).cropped(to: canvasRect)
@@ -161,6 +259,10 @@ final class Pipeline {
         let out: CIImage
         switch s.filter {
         case .none: return img
+        case .oldFilm: return looks.oldFilm(img, intensity: i, time: time)
+        case .glitch: return looks.glitch(img, intensity: i, time: time)
+        case .ascii: return looks.ascii(img, intensity: i)
+        case .halftone: return looks.halftone(img, intensity: i)
         case .mono: out = mix("CIPhotoEffectMono")
         case .noir: out = mix("CIPhotoEffectNoir")
         case .sepia: out = img.applyingFilter("CISepiaTone", parameters: [kCIInputIntensityKey: i])

@@ -78,18 +78,25 @@ final class VideoNSView: NSView {
     private var pending: CVPixelBuffer?
     /// Held so the pool doesn't recycle the surface while it's on screen.
     private var current: CVPixelBuffer?
+    private let videoLayer = CALayer()
 
     init() {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
-        layer?.contentsGravity = .resizeAspect
-        layer?.actions = ["contents": NSNull()]
+        videoLayer.contentsGravity = .resizeAspect
+        videoLayer.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(videoLayer)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     override var mouseDownCanMoveWindow: Bool { true }
+
+    override func layout() {
+        super.layout()
+        videoLayer.frame = bounds
+    }
 
     func show(_ pb: CVPixelBuffer) {
         let needsSchedule = lock.withLock {
@@ -106,7 +113,7 @@ final class VideoNSView: NSView {
             return pending
         }
         guard let pb, let surface = CVPixelBufferGetIOSurface(pb)?.takeUnretainedValue() else { return }
-        layer?.contents = surface
+        videoLayer.contents = surface
         current = pb
     }
 }

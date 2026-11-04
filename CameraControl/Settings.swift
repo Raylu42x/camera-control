@@ -10,7 +10,7 @@ struct RGB: Codable, Equatable {
 }
 
 enum BackgroundMode: String, Codable, CaseIterable, Identifiable {
-    case none, blur, preset, color, custom
+    case none, blur, preset, color, custom, screen
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -19,16 +19,22 @@ enum BackgroundMode: String, Codable, CaseIterable, Identifiable {
         case .preset: "Scene"
         case .color: "Color"
         case .custom: "Image"
+        case .screen: "Screen"
         }
     }
 }
 
 enum BackgroundPreset: String, Codable, CaseIterable, Identifiable {
-    case newsStudio, city, sunset, space, beach, synthwave, greenScreen
+    case newsStudio, weather, snow, matrix, clouds, aquarium, city, sunset, space, beach, synthwave, greenScreen
     var id: String { rawValue }
     var label: String {
         switch self {
         case .newsStudio: "News Studio"
+        case .weather: "Weather Map"
+        case .snow: "Snowfall"
+        case .matrix: "Code Rain"
+        case .clouds: "Sky"
+        case .aquarium: "Aquarium"
         case .city: "Night City"
         case .sunset: "Sunset"
         case .space: "Outer Space"
@@ -37,11 +43,57 @@ enum BackgroundPreset: String, Codable, CaseIterable, Identifiable {
         case .greenScreen: "Green Screen"
         }
     }
+    /// Animated scenes are redrawn every frame by `AnimatedScenes`.
+    var isAnimated: Bool { [.weather, .snow, .matrix, .clouds, .aquarium].contains(self) }
+}
+
+/// Effects that treat you and your background differently (need person segmentation).
+enum PersonEffect: String, Codable, CaseIterable, Identifiable {
+    case none, colorPop, neonOutline, clones, ghostTrail
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .none: "None"
+        case .colorPop: "Color Pop"
+        case .neonOutline: "Neon Outline"
+        case .clones: "Clones"
+        case .ghostTrail: "Ghost Trail"
+        }
+    }
+}
+
+enum WitnessMode: String, Codable, CaseIterable, Identifiable {
+    case off, pixelate, eyeBar
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .off: "Off"
+        case .pixelate: "Pixelate"
+        case .eyeBar: "Eye Bar"
+        }
+    }
+}
+
+/// How the video animates when it's switched off or swapped for a card, and back.
+enum OffStyle: String, Codable, CaseIterable, Identifiable {
+    case tvOff, glitch, pixels, iris, spin, fade
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .tvOff: "Old TV"
+        case .glitch: "Glitch"
+        case .pixels: "Pixels"
+        case .iris: "Iris"
+        case .spin: "Spin"
+        case .fade: "Fade"
+        }
+    }
 }
 
 enum FilterKind: String, Codable, CaseIterable, Identifiable {
     case none, mono, noir, sepia, comic, thermal, xray, invert, pixelate, posterize,
-         crystallize, kaleidoscope, bloom, vhs, edges, twirl, bulge, pinch
+         crystallize, kaleidoscope, bloom, vhs, edges, twirl, bulge, pinch,
+         oldFilm, glitch, ascii, halftone
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -63,6 +115,10 @@ enum FilterKind: String, Codable, CaseIterable, Identifiable {
         case .twirl: "Twirl"
         case .bulge: "Big Head"
         case .pinch: "Pinch"
+        case .oldFilm: "Old Film"
+        case .glitch: "Glitch"
+        case .ascii: "ASCII"
+        case .halftone: "Halftone"
         }
     }
     /// Distortions are centered on the first detected face.
@@ -143,6 +199,14 @@ struct EffectSettings: Codable, Equatable {
     var blurRadius = 18.0
     var backgroundColor = RGB(r: 0.15, g: 0.55, b: 0.35)
 
+    var presenterSmall = true
+
+    // You
+    var personEffect = PersonEffect.none
+    var laserEyes = false
+    var witness = WitnessMode.off
+    var autoFrame = false
+
     // Fun
     var sticker = Sticker.none
 
@@ -166,17 +230,39 @@ struct EffectSettings: Codable, Equatable {
     var blank = false
     var blankTitle = "Be right back"
     var blankSubtitle = "Grabbing a coffee ☕️"
+    var cameraOff = false
+    var offStyle = OffStyle.tvOff
+
+    // Starting soon
+    var startingSoon = false
+    var countdownMinutes = 5
+    var startingSoonTitle = "Starting soon"
+    var startingSoonSubtitle = "Grab a snack, we'll be live shortly 🍿"
+
+    /// True when a card (camera off, be right back, starting soon) replaces the video.
+    var showsCard: Bool { cameraOff || blank || startingSoon }
 
     static let defaultsKey = "effectSettings.v1"
 
     static func load() -> EffectSettings {
+        // Merge saved values over the defaults so settings added in later versions
+        // don't make older saved data fail to decode.
         guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-              var s = try? JSONDecoder().decode(EffectSettings.self, from: data) else {
+              let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let defaultsData = try? JSONEncoder().encode(EffectSettings()),
+              var merged = try? JSONSerialization.jsonObject(with: defaultsData) as? [String: Any] else {
+            return EffectSettings()
+        }
+        merged.merge(saved) { _, new in new }
+        guard let mergedData = try? JSONSerialization.data(withJSONObject: merged),
+              var s = try? JSONDecoder().decode(EffectSettings.self, from: mergedData) else {
             return EffectSettings()
         }
         // Never start the app with the video stopped.
         s.freeze = false
         s.blank = false
+        s.cameraOff = false
+        s.startingSoon = false
         return s
     }
 
