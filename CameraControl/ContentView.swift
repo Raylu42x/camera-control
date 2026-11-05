@@ -14,6 +14,7 @@ struct ContentView: View {
         HStack(spacing: 0) {
             VStack(spacing: 14) {
                 preview
+                applyBar
                 controlBar
                 reactionBar
                 Spacer(minLength: 0)
@@ -74,9 +75,19 @@ struct ContentView: View {
     }
 
     private var preview: some View {
-        VideoView(frames: studio.frames)
+        VideoView(frames: studio.previewFrames)
             .aspectRatio(16 / 9, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                if studio.hasPendingChanges {
+                    RoundedRectangle(cornerRadius: 12).strokeBorder(.yellow, lineWidth: 3)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if studio.hasPendingChanges {
+                    badge("PREVIEW · NOT LIVE YET", .yellow.opacity(0.9), text: .black).padding(10)
+                }
+            }
             .overlay {
                 if studio.cameraDenied {
                     VStack(spacing: 8) {
@@ -101,12 +112,37 @@ struct ContentView: View {
             }
     }
 
-    private func badge(_ text: String, _ color: Color) -> some View {
+    private func badge(_ text: String, _ color: Color, text textColor: Color = .white) -> some View {
         Text(text)
             .font(.caption.weight(.bold).monospacedDigit())
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(color, in: Capsule())
-            .foregroundStyle(.white)
+            .foregroundStyle(textColor)
+    }
+
+    /// Apply / Revert for previewed changes. The big buttons below always act at once.
+    private var applyBar: some View {
+        HStack(spacing: 10) {
+            Toggle("Preview before applying", isOn: $studio.previewFirst)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help("Try effects in this window first. Your output (OBS, Zoom) changes only when you click Apply.")
+            Spacer()
+            if studio.hasPendingChanges {
+                Text("Your output still shows the old look.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("Revert") { studio.revert() }
+                    .help("Throw away the previewed changes")
+                Button("Apply") { studio.apply() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help("Send the previewed changes to your output (⌘↩)")
+            } else if studio.previewFirst {
+                Text("Changes show here first. Freeze, Camera Off and the buttons below act at once.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .frame(minHeight: 28)
     }
 
     private var controlBar: some View {
