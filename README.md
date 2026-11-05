@@ -6,6 +6,7 @@ A macOS app that takes your webcam, adds live effects, and lets you switch your 
 
 ## Features
 
+- **Preview before you apply:** effects you pick show up in the main window first (with a yellow PREVIEW border) while your output keeps the old look. Click **Apply** (⌘↩) to send them to Zoom, or **Revert** to drop them. The big buttons (Freeze, Camera Off, Be Right Back, News Mode, Caption) still act at once. Turn off "Preview before applying" to make every change live immediately.
 - **Turn the video off and on in style:** Camera Off (⌘K), Be Right Back (⌘B) and a Starting Soon countdown card, each with an animated transition: Old TV, Glitch, Pixels, Iris, Spin or Fade. Freeze (⌘F) holds the current frame.
 - **Backgrounds:** blur, static scenes (News Studio, Night City, Sunset, Space, Beach, Synthwave, Green Screen), animated scenes (Weather Map, Snowfall, Code Rain, Sky, Aquarium), a solid color, your own image, or **presenter mode** (your screen behind you, with you in the corner). Uses on-device Vision person segmentation.
 - **You vs. background:** Color Pop (you in color, the room in black and white), Neon Outline, Clones, Ghost Trail.
@@ -71,10 +72,10 @@ Builds are ad-hoc signed by default, so no developer account is needed. With ad-
 | `Overlays.swift` | News package, captions and cards (cached per text) |
 | `Backgrounds.swift` | Procedurally drawn scenes |
 | `Particles.swift` | Emoji reactions |
-| `Studio.swift` | App state shared by the UI and the pipeline |
+| `Studio.swift` | App state shared by the UI and the pipelines: draft settings (preview) vs. applied settings (output) |
 | `ContentView.swift` | SwiftUI controls |
 
-Output is a fixed 1280×720 canvas. The preview badge shows the frame rate and the camera-to-output latency (about 50 ms on an M-series MacBook Air).
+Output is a fixed 1280×720 canvas. While there are unapplied changes, a second `Pipeline` renders them for the preview on its own queue and skips frames if it falls behind, so previewing never slows the output. The preview badge shows the frame rate and the camera-to-output latency (about 50 ms on an M-series MacBook Air).
 
 ### Render testing
 
@@ -85,6 +86,12 @@ open -n "Camera Control.app" --args -snapshotPath /tmp/frame.png -snapshotDelay 
 ```
 
 `-turnOn` (`cameraOff`, `blank` or `startingSoon`) switches a card on `-turnOnLead` seconds before the snapshot, so a short lead catches a transition mid-animation.
+
+To check the preview, pass settings to preview without applying them, plus a second path for the preview frame:
+
+```sh
+open -n "Camera Control.app" --args -snapshotPath /tmp/output.png -previewSnapshotPath /tmp/preview.png -draft '{"filter":"comic","sticker":"sunglasses"}'
+```
 
 ## Why OBS instead of a built-in virtual camera?
 

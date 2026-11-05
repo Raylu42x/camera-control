@@ -242,20 +242,31 @@ struct EffectSettings: Codable, Equatable {
     /// True when a card (camera off, be right back, starting soon) replaces the video.
     var showsCard: Bool { cameraOff || blank || startingSoon }
 
+    /// Show/hide controls from the big buttons. They act on the output at once, even while
+    /// other changes wait in the preview for Apply.
+    static let liveControls: [WritableKeyPath<EffectSettings, Bool>] =
+        [\.freeze, \.blank, \.cameraOff, \.startingSoon, \.newsEnabled, \.captionEnabled]
+
     static let defaultsKey = "effectSettings.v1"
+
+    /// Returns these settings with the fields in `data` (JSON) laid over them. Unknown or
+    /// missing fields keep their current values.
+    func merging(_ data: Data) -> EffectSettings? {
+        guard let patch = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let baseData = try? JSONEncoder().encode(self),
+              var merged = try? JSONSerialization.jsonObject(with: baseData) as? [String: Any] else { return nil }
+        merged.merge(patch) { _, new in new }
+        guard let mergedData = try? JSONSerialization.data(withJSONObject: merged) else { return nil }
+        return try? JSONDecoder().decode(EffectSettings.self, from: mergedData)
+    }
+
+    func merging(json: String) -> EffectSettings { merging(Data(json.utf8)) ?? self }
 
     static func load() -> EffectSettings {
         // Merge saved values over the defaults so settings added in later versions
         // don't make older saved data fail to decode.
         guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-              let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let defaultsData = try? JSONEncoder().encode(EffectSettings()),
-              var merged = try? JSONSerialization.jsonObject(with: defaultsData) as? [String: Any] else {
-            return EffectSettings()
-        }
-        merged.merge(saved) { _, new in new }
-        guard let mergedData = try? JSONSerialization.data(withJSONObject: merged),
-              var s = try? JSONDecoder().decode(EffectSettings.self, from: mergedData) else {
+              var s = EffectSettings().merging(data) else {
             return EffectSettings()
         }
         // Never start the app with the video stopped.

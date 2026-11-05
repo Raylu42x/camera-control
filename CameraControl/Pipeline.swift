@@ -9,7 +9,7 @@ import QuartzCore
 final class Pipeline {
     let ciContext = CIContext(mtlDevice: MTLCreateSystemDefaultDevice()!, options: [.cacheIntermediates: false])
     let particles = ParticleSystem()
-    let screen = ScreenSource()
+    let screen: ScreenSource
     /// Called about once a second with the output frame rate and the average
     /// camera-to-finished-frame latency in milliseconds.
     var onStats: ((_ fps: Int, _ latencyMs: Int) -> Void)?
@@ -47,6 +47,11 @@ final class Pipeline {
     }()
 
     private var _snapshotURL: URL?
+
+    /// Pipelines can share one screen capture (the preview and the output both show it).
+    init(screen: ScreenSource = ScreenSource()) {
+        self.screen = screen
+    }
 
     var settings: EffectSettings { lock.withLock { _settings } }
 
